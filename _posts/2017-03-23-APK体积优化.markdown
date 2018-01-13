@@ -1,0 +1,263 @@
+---
+layout:     post
+title:      "APK体积优化"
+author:     "CoXier"
+header-img: "img/post-bg.jpg"
+tags:
+
+- Android
+---
+
+# 一、APK概述
+APK的全称 **Android Application Package**
+
+>APK是Android操作系统使用的一种应用程序包文件格式，用于分发和安装移动应用及中间件。一个Android应用程序的代码想要在Android设备上运行，必须先进行编译，然后被打包成为一个被Android系统所能识别的文件才可以被运行，而这种能被Android系统识别并运行的文件格式便是“APK”。——维基百科
+
+# 二、APK构建过程
+![](http://ofqrfk7np.bkt.clouddn.com/build-process_2x.png)
+
+上图只是一个简化的APK构建过程，具体的构建过程如下：
+
+![](http://mouxuejie.com/image/2016-08-04-build-and-package-flow-introduction/android_build.png)
+
+
+# 三、APK的构成
+Android Studio上的工具Android Apk Analyzer可以用来分析APK文件的构成。下面来[Girl](https://github.com/CoXier/Girl)为例来分析：
+
+![](http://ofqrfk7np.bkt.clouddn.com/%E9%80%89%E5%8C%BA_009.png)
+
+从图可知，一个APK文件通常包含以下文件：
+
+* **lib**:存放C/C++库，对于不同的处理器架构如：armeabi，armeabi-v7a, x86等有具体的分包
+* **classes.dex**：class文件被编译成dex文件格式，dex文件格式可以被Dalvik虚拟机识别
+* **assets** :存放应用的资源文件，可以通过AssetManager获取此文件下的资源。例如常见的字体资源就可以放在此目录下
+* **res** :存放没有编译进入resources.arsc的资源文件
+* **resources.arsc** :存放xml二进制资源文件
+* **META-INF** :包含安全证书CERT.RSA
+
+# 四、APK瘦身实战
+以Girl为例来进行实战，瘦身之前release APK（unzip）大小：**10.1MB**
+
+## 4.1 拆分APK
+从上图可以看出lib占的内存比例很大，lib中包含了`armeabi`,`armeabi-v7a`，`x86`等不同处理器的库，通过拆分生成针对某一个处理器的APK来减少APK体积。
+
+```java
+splits {
+
+    // Configures multiple APKs based on ABI.
+    abi {
+
+        // Enables building multiple APKs per ABI.
+        enable true
+
+        // By default all ABIs are included, so use reset() and include to specify that we only
+        // want APKs for x86, armeabi-v7a, and mips.
+
+        // Resets the list of ABIs that Gradle should create APKs for to none.
+        reset()
+
+        // Specifies a list of ABIs that Gradle should create APKs for.
+        include "x86", "armeabi-v7a", "armeabi"
+
+        // Specifies that we do not want to also generate a universal APK that includes all ABIs.
+        universalApk false
+    }
+}
+```
+通过上面的脚本，生成了三种apk:
+
+* app-armeabi-release.apk：**6.6MB**
+* app-armeabi-v7a-release.apk: **6.6MB**
+* app-x86-release.apk: **7.6MB**
+
+效果还是很显著的。其实在现在的国内Android应用市场，一般针对`armeabi`处理器即可，所以下面我只生成`armeabi`版的APK。
+
+## 4.2 代码混淆
+初步处理lib之后，dex占的比例最大，现在就着手处理dex。dex的处理可以使用代码混淆，代码混淆有两个关键操作：
+
+* 移除未使用的类和类成员
+* 用a,b,c这样无意义的字符去替代一些标识符
+
+第二个操作可能会使得debug变得笨重，因此只需要在release版本开启。
+
+
+```java
+android {
+    ...
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+```
+第二行，谈及了两个文件proguard-android.txt和proguard-rules.pro。proguard-android.txt在`sdk/tools/proguard/proguard-android.txt`,是所有Android项目的默认混淆文件。
+
+### 4.2.1 混淆的坑
+
+开启了上述设置后，然后开始build。结果报了一大堆Warning，截取一行：
+
+```java
+Warning:butterknife.internal.ButterKnifeProcessor: can't find superclass or interface javax.annotation.processing.AbstractProcessor
+```
+看来问题出在ButterKnifeProcessor上，使用：
+
+```java
+-dontwarn butterknife.internal.**
+```
+> `dontwarn` means no warning
+
+当然这只是治标不治本，之后还是要对butterknife进行处理的。
+
+```java
+-keep class butterknife.** {*;}
+-dontwarn butterknife.internal.**
+-keep class **$$ViewBinder {*;}
+-keepclasseswithmembernames class *{
+    @butterknife.* <fields>;
+}
+-keepclasseswithmembernames class *{
+    @butterknife.* <methods>;
+}
+```
+
+因为APP使用了RxJava,Retrofit,Jsoup等第三方库，所以这个时候一定要耐心的针对每一个库进行添加混淆规则。需要注意的是，如果自己的某个类需要序列化或者反序列化，一定还要针对自己的model添加混淆规则。(这是一个很繁琐的过程，做好心理准备)
+
+混淆之后现在apk大小为 **5.5MB**，效果也还不错
+
+### 4.2.2 常用的混淆规则
+针对这个项目的混淆规则已经上传到[Gist](https://gist.github.com/CoXier/8b74095d29bdcee2ba52d5fcf4218436)
+
+
+### 4.2.3 关于混淆的看法
+在4.2一节，代码混淆起到的作用有两点：
+
+1. 移除未使用的代码
+2. 混淆代码，增加逆向反编译的难度，对APP的安全有一定的保障。
+
+在混淆的过程中，我认为ButterKnife可有可无，使用ButterKnife的初衷可能仅仅就是偷懒或者语法糖。如果工程比较大的话，使用注解器是否会影响编译速度？生成的class文件大概会有多少？所以我认为完全可以开发插件来生成findViewById这些固定步骤。
+
+## 4.3 优化资源
+针对完代码的压缩后，接下来考虑资源。apk中有三个部分和资源有关，分别是`assets`,`res`,`resources.arsc`。
+
+为了压缩资源，添加下面一行：
+
+```java
+
+buildTypes {
+    release {
+        minifyEnabled true
+        // here
+        shrinkResources true
+        proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+    }
+}
+```
+
+### 4.3.1 优化resources.arsc
+resources.arsc文件下包含了strings,styles,dimen等xml资源文件，如果这部分所占内存比较大的话，可以从下面几个部分优化。
+
+#### 4.3.1.1 仅支持特定语言
+很多库下面的String都被翻译成很多语言的文字，像Support Library和Google Play Service。采用下面设置仅支持英语和简体中文。
+
+```java
+android {
+    defaultConfig {
+        ...
+        resConfigs "en", "zh-rCN"
+    }
+}
+```
+
+### 4.3.2 优化res
+优化res文件夹可以从优化图片着手。优化图片从压缩图片和使用矢量图出发。因为Girl这个项目使用的png或者jpeg图片不多（也就是icon），所以下面只考虑如何使用矢量图来优化图片资源。
+
+
+因为vectorDrawable之前只能在 API 21 及以上版本被支持，为了兼容 API 20 及以下，google增加了support library。
+
+```java
+android {
+  defaultConfig {
+    vectorDrawables.useSupportLibrary = true
+  }
+}
+```
+然后使用AS内置的 **Asset Studio**
+
+做完4.3之后，APK体积并没有明显的减少，但是我相信4.3在实际的APK瘦身中是必不可少的。
+
+## 4.4 使用工具来瘦身
+做完上面的工作后，还可以利用大厂开源的工具来压缩APK。
+
+### 4.4.1 Redex
+[Redex](http://fbredex.com/)是fb开源的用来优化Android字节码（dex）的工具。
+
+```java
+redex path/to/your.apk -o path/to/output.apk
+```
+**注意：使用redex后，需要对APK进行重新签名**
+
+所以一步到位：
+
+```java
+ANDROID_SDK=~/Android/Sdk redex app-armeabi-release.apk -o output.apk --sign -s ~/Android/Coxier\'s_Key_Store.jks -a 'coxier' -p 'xx'
+```
+
+减少**0.3MB**,现在APK大小为**5.2MB**
+
+### 4.4.2 AndResGuard
+[AndResGuard](https://github.com/shwenzhang/AndResGuard)是wechat开源用来混淆资源的工具，可以将原来冗长的资源路径变短。但是需要配置白名单，如果需要在代码中通过R.xx.xxx获取，则需要将此资源配置到白名单中。
+
+```java
+andResGuard {
+    // mappingFile = file("./resource_mapping.txt")
+    mappingFile = null
+    // 当你使用v2签名的时候，7zip压缩是无法生效的。
+    use7zip = true
+    useSign = true
+    // 打开这个开关，会keep住所有资源的原始路径，只混淆资源的名字
+    keepRoot = false
+    def packageName = "com.hackerli.girl."
+    whiteList = [
+            packageName + "R.drawable.*",
+            packageName + "R.anim.*",
+            packageName + "R.array.*",
+            packageName + "R.menu.*",
+            packageName + "R.layout.*",
+            packageName + "R.color.*"
+
+    ]
+    compressFilePattern = [
+            "*.png",
+            "*.jpg",
+            "*.jpeg",
+            "*.gif",
+            "resources.arsc"
+    ]
+    sevenzip {
+        artifact = 'com.tencent.mm:SevenZip:1.2.0'
+        //path = "/usr/local/bin/7za"
+    }
+}
+```
+关闭v2签名：
+
+```java
+signingConfigs {
+    config {
+        keyAlias 'xx'
+        keyPassword 'xxx'
+        storeFile file('your keystore path')
+        storePassword 'xxx'
+        v2SigningEnabled false
+    }
+}
+```
+
+因为采用 7 zip 压缩，所以可以使用redex优化dex，然后使用AndResGuard混淆资源路径和压缩。
+
+减少**0.5MB**,现在APK大小位**5MB**
+
+# 五、总结
+总的来说，对APK体积瘦身，无非是从dex文件和resources.arcs这两个方面入手。在瘦身的过程中，需要开发人员充分了解工程结构，对某些资源加以合适的处理，绝不能为了瘦身而增加APP的不稳定性。

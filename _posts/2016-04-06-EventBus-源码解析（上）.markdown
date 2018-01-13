@@ -1,0 +1,175 @@
+---
+layout:     post
+title:      "EventBus源码解析（上）"
+author:     "CoXier"
+header-img: "img/post-bg.jpg"
+tags:
+
+- 源码解析
+- Android
+---
+
+# 一、EventBus
+EventBus基于观察者模式的Android事件分发总线。看一下这个图：
+![](https://github.com/greenrobot/EventBus/raw/master/EventBus-Publish-Subscribe.png)
+
+从这个图可以看出，EventBus使得 **事件发送** 和 **事件接收** 很好的解耦。另外使得Android的组件例如Activity和Fragment之间的通信变得简单。最重要的一点是可以使得代码变得整洁。
+
+## 1.1 使用EventBus
+使用EventBus也是非常的简单，首先添加依赖：
+
+``` bash
+ compile 'org.greenrobot:eventbus:3.0.0'
+```
+使用分为三步：
+
+1）定义消息事件MessageEvent，也就是创建事件类型
+
+```java
+public class MessageEvent {
+    public final String message;
+    public MessageEvent(String message) {
+        this.message = message;
+    }
+}
+```
+
+2）选择你要订阅的订阅者（subscriber），例如我选择的是 Activity，可以在onCreate() 调用EventBus.getDefault().register(this)。在不需要接收事件发生解注册 EventBus.getDefault().unregister(this);
+
+在订阅者里需要用注解关键字 @Subscribe来“告诉”EventBus使用什么方法处理event
+
+``` java
+@Subscribe
+public void onMessageEvent(MessageEvent event) {
+    Toast.makeText(this, event.message, Toast.LENGTH_SHORT).show();
+}
+```
+**注意：方法只能被 public 修饰，在 EventBus3.0 之后该方法名字就可以自由的取了，之前的好像只能是onEvent().**
+
+3）最后就是发送事件了
+
+``` java
+ EventBus.getDefault().post(new MessageEvent("HelloEveryone"));
+```
+
+# 二、Annotation
+无论是 ButterKnife，还是 EventBus 都大量使用了注解，所以在正式进入源码分析之前，补一下 Annotation 的相关知识：
+
+## 2.1 Annotation的作用
+
+* 给 compiler 提供信息，用来检测错误,如 @override
+* 在编译期，一些工具（如apt)可以通过 Annotation 信息自动生成一些代码
+
+
+## 2.2 声明注解类型
+For Example:
+
+先定义Annotation:
+
+```Java
+@interface ClassPreamble {
+   String author();
+   String date();
+   int currentRevision() default 1;
+   String lastModified() default "N/A";
+   String lastModifiedBy() default "N/A";
+   // Note use of array
+   String[] reviewers();
+}
+
+```
+
+使用：
+
+```Java
+@ClassPreamble (
+   author = "John Doe",
+   date = "3/17/2002",
+   currentRevision = 6,
+   lastModified = "4/12/2004",
+   lastModifiedBy = "Jane Doe",
+   // Note array notation
+   reviewers = {"Alice", "Bob", "Cindy"}
+)
+```
+
+## 2.3 注解的类型
+
+#### 2.3.1 Annotation Types Used by the Java Language
+
+下面三个 Annotation 在 `java.lang` 中被定义
+
+* @Deprecated 标记的元素是不推荐使用的，使用会产生warning。如果声明了@Deprecated，应该给出弃用的理由以及用什么替代
+* @SuppressWarnings 不产生warning
+* @Override
+
+
+#### 2.3.2 Annotations That Apply to Other Annotations
+
+下面的 Annotations 在 java.lang.annotation 被定义，用来“修饰”其他 Annotation。
+
+* @Rentation 指示被其修饰的 Annotation 如何被存储：
+  + Source:被compiler忽略，只保留在Java Source Code这个层面
+  + Class:在编译期被保留，被JVM忽略
+  + Runtime:在运行期被保留
+* @Target 表明被其修饰的Annotation作用的区域，有`Method`、`Type`、`CONSTRUCTOR`
+
+
+
+# 三、@Subscribe
+现在来看看在EventBus中定义的@Subscribe，此注解的参数有三个。看源代码：
+
+``` java
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD})
+public @interface Subscribe {
+    ThreadMode threadMode() default ThreadMode.POSTING;
+
+    /**
+     * If true, delivers the most recent sticky event (posted with
+     * {@link EventBus#postSticky(Object)}) to this subscriber (if event available).
+     */
+    boolean sticky() default false;
+
+    /** Subscriber priority to influence the order of event delivery.
+     * Within the same delivery thread ({@link ThreadMode}), higher priority subscribers will receive events before
+     * others with a lower priority. The default priority is 0. Note: the priority does *NOT* affect the order of
+     * delivery among subscribers with different {@link ThreadMode}s! */
+    int priority() default 0;
+}
+
+```
+
+**ThreadMode** 是 `enum` 类型，threadMode 默认值是 `POSTING`。ThreadMode 有四种模式：
+
+* `POSTING`: Subscriber 会在 post event 的所在线程回调，故它不需要切换线程来分发事件，因此开销最小。它要求 task 完成的要快，因为有可能阻塞 main thread.
+
+* `MAIN` :Subscriber会在主线程（有时候也被叫做UI线程）回调，如果post event所在线程是MainThread,则可直接回调。注意不能阻塞主线程。
+
+* `BACKGROUND` ：Subscriber会在后台线程中回调。如果 post event 所在线程不是 MainThread，那么可直接回调；如果是MainThread,EventBus会用单例background thread来有序地分发事件。注意不能阻塞background thread。
+
+* `ASYNC`：当处理事件的 Method 是耗时的，需要使用此模式。尽量避免同时触发大量的耗时较长的异步操作，EventBus使用线程池高效的复用已经完成异步操作的线程。
+
+上面的四种模式中，常用的是`POSTING`。个人认为EventBus不太适合处理网络请求，原因：1.需要考虑在ThreadMode为ASYNC的method中切换线程来更新UI 2.并不符合观察者模式的具体使用场景。 但是其能在Android组件中通信，代替`onActivityForResult`等类似的回调，可以增强程序的可读性、优雅性。
+
+再回到 @Subscribe ,还有两个参数，`sticky`默认值是false，如果是true,那么可以通过EventBus的postSticky方法分发最近的粘性事件给该订阅者（前提是该事件可获得）。
+
+最后一个参数是`priority`，Method的优先级，优先级高的可以先获得分发的事件。这个不会影响不同的ThreadMode的分发事件顺序。
+
+## 3.1 使用Android Apt
+在EventBus3中引入apt，能帮助我们在编译期间处理@Subscribe，生成相关代码，和用反射找method相比，效率略高。具体的使用方法：
+
+```gradle
+  compile 'org.greenrobot:eventbus:3.0.0'
+  apt 'org.greenrobot:eventbus-annotation-processor:3.0.1'
+
+  apt {
+    arguments {
+        eventBusIndex "com.example.myapp.MyEventBusIndex"
+    }
+  }
+```
+
+这样在编译之后就会生成`MyEventBusIndex`，这个类就储存了相关信息。
+
+**其实我觉得EventBus并没有利用好apt，可以模仿ButterKnife的做法，生成有固定格式的java文件如MyEventBusIndex,这样就能完全remove之前的findxxByReflection**

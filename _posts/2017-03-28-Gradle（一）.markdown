@@ -1,0 +1,175 @@
+---
+layout:     post
+title:      "Gradle Basic"
+author:     "CoXier"
+header-img: "img/gradle.jpg"
+tags:
+
+- Gradle
+---
+
+# 一、Gradle介绍
+Gradle 是一种构建工具，基于 Grovy 语言，顺带一提，Grovy 文件经过编译之后也是`.class` 文件。官网对 gralde 的描述是：对于 java 工程的构建是一个飞跃。
+
+相比于之前的 maven 构建工具，Gradle 的优势在于：
+
+* 构建配置文件较容易，maven 需要使用 xml 语法
+* 可以自定义插件,定制性更高更方便。
+
+# 二、Gralde安装
+
+## 2.1 Gradle wrapper
+如果在练习 gralde 之前，使用过 Android Studio ,则就不需要安装 gralde 了，Android Studio 已经帮你下载安装好了。事实上 Android Studio 是借助 gradle wrapper 来下载指定版本的 gradle。具体是如何安装的，可以参考 [gradle/wrapper](https://github.com/gradle/gradle/tree/master/subprojects/wrapper)。
+
+gralde 安装路径：
+```java
+// Max Os or Linux Os
+/home/username/.gradle/wrapper/dists
+
+// Windows
+C:\Documents and Settings<用户名>.gradle\wrapper\dists
+```
+
+## 2.2 Normal Install
+
+先手动下载
+
+然后配置系统路径：
+
+```java
+// 为了方便管理，将下载的gradle全放在 /home/coxier/.gradle/wrapper/dists 下
+unzip -d /home/coxier/.gradle/wrapper/dists gradle-3.4.1-bin.zip
+
+// 在 ~/.zshrc中加入
+export PATH=$PATH:/home/coxier/.gradle/wrapper/dists/gradle-3.4.1/bin
+
+source ~/.zshrc
+```
+这里的gradle版本可以自己手动选择。
+
+```java
+gradle -v
+
+------------------------------------------------------------
+Gradle 3.4.1
+------------------------------------------------------------
+
+Build time:   2017-03-03 19:45:41 UTC
+Revision:     9eb76efdd3d034dc506c719dac2955efb5ff9a93
+
+Groovy:       2.4.7
+Ant:          Apache Ant(TM) version 1.9.6 compiled on June 29 2015
+JVM:          1.8.0_111 (Oracle Corporation 25.111-b14)
+OS:           Linux 4.4.0-59-generic amd64
+
+```
+# 三、Groovy 语言基础
+
+在前面说过, gralde 的脚本文件需要使用 groovy 语言来写。现在来熟悉 groovy 的语法。
+
+groovy 运行在 JVM 上，支持闭包和DSL，是一门非常灵活的动态脚本语言。
+
+## 3.1 基本类型
+groovy 的变量类型是运行时指定的，和 Py , Js 挺像的。而且 groovy 还可以支持类型的变化。
+
+例如：
+
+```groovy
+task printVar{
+  def name = 'coxier'
+  println name
+  name = 10
+  println name
+}
+```
+输出：
+
+```java
+coxier
+10
+```
+groovy 特别灵活，比如上面的输出还可以像 shell script 写：
+
+```java
+println "name = ${name}"
+```
+## 3.2 引用类型
+groovy 支持大多数 java 语法，所以 groovy 可以和 java 混用。
+
+```java
+class JavaGreeter {
+    public void sayHello() {
+        System.out.println("Hello Java!");
+    }
+}
+
+JavaGreeter greeter = new JavaGreeter()
+greeter.sayHello()
+```
+## 3.3 函数
+
+```java
+def doubleIt(n) {
+    n + n // Note we don't need a return statement
+}
+```
+不需要声明参数的类型和返回类型。函数体中的最后一个表达式的值被返回。
+
+## 3.4 闭包
+groovy 支持闭包。闭包的基本思想是：将函数看成变量，其值可以像 string,number 一样被传递。
+
+### 3.4.1 闭包的基本用法
+```java
+def f = {
+  println "HelloWorld"
+}
+
+f()
+def s = f
+s()
+```
+
+输出：
+
+```java
+HelloWorld
+HelloWorld
+```
+闭包对于参数的记法有所不同。像这样：
+
+```java
+def doubleIt = {
+  x -> x + x
+}
+
+println "doubleIt(5) = " + doubleIt(5)
+```
+上面说了函数可以看成变量，所以函数也可以作为另一个函数的参数。例如:
+
+```java
+def applyTwice(func,arg) {
+  func(func(arg))
+}
+
+println "5 * 4 = " + applyTwice(doubleIt,5)
+```
+当然我们也可以写的简单点：
+
+```java
+def applyTwice = {
+  func,arg->func(func(arg))
+}
+
+println "5 * 4 = " + applyTwice(doubleIt,5)
+```
+### 3.2 List
+
+List 声明和遍历的方式如下：
+
+```java
+def myList = ["Gradle", "Groovy", "Android"]
+def printItem = {item -> println "List item: $item"}
+myList.each(printItem)
+// or
+myList.each{println "Compactly printing each list item: $it"}
+```

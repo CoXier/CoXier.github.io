@@ -1,0 +1,348 @@
+---
+layout:     post
+title:      "EventBus源码解析（中）"
+author:     "CoXier"
+header-img: "img/post-bg.jpg"
+tags:
+
+- 源码解析
+- Android
+---
+
+
+# 一、Register
+上篇讲解了EventBus的使用方法 、Annotation的一些基础知识。这篇将讲解Register的流程
+
+源码：
+
+```java
+public void register(Object subscriber) {
+        Class<?> subscriberClass = subscriber.getClass();
+        List<SubscriberMethod> subscriberMethods = subscriberMethodFinder.findSubscriberMethods(subscriberClass);
+        synchronized (this) {
+            for (SubscriberMethod subscriberMethod : subscriberMethods) {
+                subscribe(subscriber, subscriberMethod);
+            }
+        }
+    }
+```
+仔细看代码不难读懂，名字已经表明了功能。首先得到订阅者的Class对象，然后通过subscriberMethodFinder寻找subscriberMethods。
+
+## 1.1 findSubscriberMethods()
+
+``` java
+
+List<SubscriberMethod> findSubscriberMethods(Class<?> subscriberClass) {
+        List<SubscriberMethod> subscriberMethods = METHOD_CACHE.get(subscriberClass);
+        if (subscriberMethods != null) {
+            return subscriberMethods;
+        }
+
+        if (ignoreGeneratedIndex) {
+            subscriberMethods = findUsingReflection(subscriberClass);
+        } else {
+            subscriberMethods = findUsingInfo(subscriberClass);
+        }
+        if (subscriberMethods.isEmpty()) {
+            throw new EventBusException("Subscriber " + subscriberClass
+                    + " and its super classes have no public methods with the @Subscribe annotation");
+        } else {
+            METHOD_CACHE.put(subscriberClass, subscriberMethods);
+            return subscriberMethods;
+        }
+    }
+```
+`METHOD_CACHE` map的key是Class,value是List<SubscriberMethod>。
+首先从缓存中获取subscriberMethods，如果不是null，直接返回。若是null，则就要面对`ignoreGeneratedIndex`这个变量了,默认是false，也就是说EventBus会优先使用apt的那套方案进行查找。
+
+首先看看一下`subscriberMethods = findUsingReflection(subscriberClass)`的实现：
+
+```java
+private List<SubscriberMethod> findUsingReflection(Class<?> subscriberClass) {
+        FindState findState = prepareFindState();
+        findState.initForSubscriber(subscriberClass);
+        while (findState.clazz != null) {
+            findUsingReflectionInSingleClass(findState);
+            findState.moveToSuperclass();
+        }
+        return getMethodsAndRelease(findState);
+    }
+
+```
+
+请注意最后的`getMethodsAndRelease(findState)`方法，这个方法非常重要！！有两个作用：一个是获取methods，另一个是释放findState里面的map信息。看一下方法实现：
+
+```java
+private List<SubscriberMethod> getMethodsAndRelease(FindState findState) {
+        List<SubscriberMethod> subscriberMethods = new ArrayList<>(findState.subscriberMethods);
+        findState.recycle();
+        synchronized (FIND_STATE_POOL) {
+            for (int i = 0; i < POOL_SIZE; i++) {
+                if (FIND_STATE_POOL[i] == null) {
+                    FIND_STATE_POOL[i] = findState;
+                    break;
+                }
+            }
+        }
+        return subscriberMethods;
+    }
+```
+
+
+这里先把methods取了出来，然后recycle。接下来的这个for循环和之前的prepareFindState这个方法是前后呼应的。我们来看看这里面的智慧：
+
+```java
+private FindState prepareFindState() {
+      synchronized (FIND_STATE_POOL) {
+          for (int i = 0; i < POOL_SIZE; i++) {
+              FindState state = FIND_STATE_POOL[i];
+              if (state != null) {
+                  FIND_STATE_POOL[i] = null;
+                  return state;
+              }
+          }
+      }
+      return new FindState();
+  }
+```
+
+
+对比发现，这是个复用池。第一次prepareFindState时，FIND_STATE_POOL[i]全不是null，有了一个state之后把相应的FIND_STATE_POOL[i]的引用变为null。用完了这个state之后，recycle下面的for循环，会找到一个引用为null的FIND_STATE_POOL[i]，并把自身引用赋给他。这个复用池的效果就出来了：用的时候隔离开，用完了放回去。
+
+
+接下来最重要的  `findUsingReflectionInSingleClass(findState)`
+
+```java
+private void findUsingReflectionInSingleClass(FindState findState) {
+        Method[] methods;
+        try {
+            // This is faster than getMethods, especially when subscribers are fat classes like Activities
+            methods = findState.clazz.getDeclaredMethods();
+        } catch (Throwable th) {
+            // Workaround for java.lang.NoClassDefFoundError, see https://github.com/greenrobot/EventBus/issues/149
+            methods = findState.clazz.getMethods();
+            findState.skipSuperClasses = true;
+        }
+        for (Method method : methods) {
+            int modifiers = method.getModifiers();
+            if ((modifiers & Modifier.PUBLIC) != 0 && (modifiers & MODIFIERS_IGNORE) == 0) {
+                Class<?>[] parameterTypes = method.getParameterTypes();
+                if (parameterTypes.length == 1) {
+                    Subscribe subscribeAnnotation = method.getAnnotation(Subscribe.class);
+                    if (subscribeAnnotation != null) {
+                        Class<?> eventType = parameterTypes[0];
+                        if (findState.checkAdd(method, eventType)) {
+                            ThreadMode threadMode = subscribeAnnotation.threadMode();
+                            findState.subscriberMethods.add(new SubscriberMethod(method, eventType, threadMode,
+                                    subscribeAnnotation.priority(), subscribeAnnotation.sticky()));
+                        }
+                    }
+                } else if (strictMethodVerification && method.isAnnotationPresent(Subscribe.class)) {
+                    String methodName = method.getDeclaringClass().getName() + "." + method.getName();
+                    throw new EventBusException("@Subscribe method " + methodName +
+                            "must have exactly 1 parameter but has " + parameterTypes.length);
+                }
+            } else if (strictMethodVerification && method.isAnnotationPresent(Subscribe.class)) {
+                String methodName = method.getDeclaringClass().getName() + "." + method.getName();
+                throw new EventBusException(methodName +
+                        " is a illegal @Subscribe method: must be public, non-static, and non-abstract");
+            }
+        }
+    }
+
+```
+**使用反射的方式查找subscriberMethods。初始findState之后，开始while循环查找，在每次查找时，只用一个Class对象，然后在继承结构上往上查找超类的subscriberMethods。可是看到这，我就想问了为啥不直接用Class.getMethods直接获取该类的全部方法呢？作者用`getDeclaredMethods`其实是做过深层次考虑的，如果这个类比较庞大，用`getMethods`查找所有的方法就显得很笨重了，如果使用的是getDeclaredMethods（该类声明的方法不包括从父类那里继承来的public方法），速度就会快一些，因为找的方法变少了，没有什么equlas,toString,hashCode等系统类的方法。这里说的比较抽象，读者可以实验一下，或者goole这两个方法的区别**
+
+
+从新手的角度来解释：
+
+1.Java的反射机制中，可以通过Class对象getMethods,这里用的是getDeclaredMethods，原因是对某些像Activity庞大的Class对象速度更快。`clazz`这种写法在很多程序中都出现了，这样的叫法是为了避免关键字而采取的变音（s和z读音像）。
+
+2.modifier中文意思是修饰符，从if语句可以很容易知道这里需要解析获取的methods，并且知道需public修饰.其中有一个变量int MODIFIERS_IGNORE
+
+```java
+private static final int MODIFIERS_IGNORE = Modifier.ABSTRACT | Modifier.STATIC | BRIDGE | SYNTHETIC;
+```
+
+这是位运算，具体的计算可以google，但是这里的写法确实比较高级。(modifiers & MODIFIERS_IGNORE) == 0 这一句就可以检查不能是这四个关键字的一个，按照平常的写法会写的比较冗长。
+
+3.if (parameterTypes.length == 1) 表明methods的参数只能有一个
+
+4.
+
+```java
+Subscribe subscribeAnnotation = method.getAnnotation(Subscribe.class);
+if (subscribeAnnotation != null)
+```
+
+很自然，需要的method是被@Subscribe注解的，如果不了解注解的可以去看看Java编程思想。
+
+5.这里还有一个判断：
+
+```java
+findState.checkAdd(method, eventType)
+```
+
+从checkAdd()控制的程序流向，知道他是来控制findState.subscriberMethods是否添加找到的method。为什么要这个判断呢？
+看到这里我觉得是时候看看这个FindState类了：
+
+```java
+static class FindState {
+        final Map<Class, Object> anyMethodByEventType = new HashMap<>();
+        ..............
+        boolean checkAdd(Method method, Class<?> eventType) {
+            // 2 level check: 1st level with event type only (fast), 2nd level with complete signature when required.
+            // Usually a subscriber doesn't have methods listening to the same event type.
+            Object existing = anyMethodByEventType.put(eventType, method);
+            if (existing == null) {
+                return true;
+            } else {
+                if (existing instanceof Method) {
+                    if (!checkAddWithMethodSignature((Method) existing, eventType)) {
+                        // Paranoia check
+                        throw new IllegalStateException();
+                    }
+                    // Put any non-Method object to "consume" the existing Method
+                    anyMethodByEventType.put(eventType, this);
+                }
+                return checkAddWithMethodSignature(method, eventType);
+            }
+        }
+
+        private boolean checkAddWithMethodSignature(Method method, Class<?> eventType) {
+            methodKeyBuilder.setLength(0);
+            methodKeyBuilder.append(method.getName());
+            methodKeyBuilder.append('>').append(eventType.getName());
+
+            String methodKey = methodKeyBuilder.toString();
+            Class<?> methodClass = method.getDeclaringClass();
+            Class<?> methodClassOld = subscriberClassByMethodKey.put(methodKey, methodClass);
+            if (methodClassOld == null || methodClassOld.isAssignableFrom(methodClass)) {
+                // Only add if not already found in a sub class
+                return true;
+            } else {
+                // Revert the put, old class is further down the class hierarchy
+                subscriberClassByMethodKey.put(methodKey, methodClassOld);
+                return false;
+            }
+        }
+
+    }
+```
+
+这个涉及到两层检查，第一层判断有无method监听此eventType,如果没有则可直接把找到的method加到subscriberMethods中。
+
+第二层检查，有的人说是避免一个类出现多个方法监听同一个事件，但是我想说的是no!!。第二层检查的关键是读懂`checkAddWithMethodSignature()`，从字面意思来说是从MethodSignature（方法签名）判断能否把找到的method加进去。
+
+那什么是方法签名呢？仔细看代码，发现其实方法签名是methodName + eventTypeName。区分method很关键的是从方法名和参数类型以及参数个数入手，由于之前的判断中已经限制了参数的个数是一个了，所以只需要考虑方法名和方法的参数类型。
+再看看`methodClassOld.isAssignableFrom(methodClass)`这个方法，（强烈建议看英文注释）发现这是判断methodClassOld是否是methodClass的父类。这样以来这个方法返回的就一直是false，毫无意义，这里作者到底想干什么？我不知道，希望有人来解释一下。
+
+我的猜想：作者这么做很有可能是为了防止在找父类时覆盖了子类的方法，因为此方法是子类是重写，方法名参数名完全一样（方法签名）；另一个原因是可能是当一个类有多个方法监听同一个event(尽管一般不会这样做)，也能将这些方法加进去。
+
+## 1.2 subscribe()
+通过反射找到被@subscribe修饰的方法后，接下来就是要建立订阅者和这些事件的联系。
+
+```java
+ private void subscribe(Object subscriber, SubscriberMethod subscriberMethod) {
+        Class<?> eventType = subscriberMethod.eventType;
+        Subscription newSubscription = new Subscription(subscriber, subscriberMethod);
+        CopyOnWriteArrayList<Subscription> subscriptions = subscriptionsByEventType.get(eventType);
+        if (subscriptions == null) {
+            subscriptions = new CopyOnWriteArrayList<>();
+            subscriptionsByEventType.put(eventType, subscriptions);
+        } else {
+            if (subscriptions.contains(newSubscription)) {
+                throw new EventBusException("Subscriber " + subscriber.getClass() + " already registered to event "
+                        + eventType);
+            }
+        }
+}
+
+```
+
+假若subscriptions里已经有了newSubscription，那么就会抛出异常，这验证了第一个看法。这里有个比较重要的类Subscription把subcriber和subcriberMethod包装了一下。看看他的成员变量：
+
+```java
+final class Subscription {
+    final Object subscriber;
+    final SubscriberMethod subscriberMethod;
+    /**
+     * Becomes false as soon as {@link EventBus#unregister(Object)} is called, which is checked by queued event delivery
+     * {@link EventBus#invokeSubscriber(PendingPost)} to prevent race conditions.
+     */
+    volatile boolean active;
+｝
+```
+重要的变量active,会在unregister调用之后变成false，active会在事件分发时被检查，若是false，此时unregister的功能就实现了。
+
+现在我们来分析设计者如何处理priority和sticky这两个参数：
+
+先看`priority`:
+
+```java
+int size = subscriptions.size();
+for (int i = 0; i <= size; i++) {
+    if (i == size || subscriberMethod.priority > subscriptions.get(i).subscriberMethod.priority) {
+        subscriptions.add(i, newSubscription);
+        break;
+    }
+}
+```
+遍历subscriptions，找到比subscriberMethod.priority小的位置，把newSubscription插进去，这也表明了subscription中priority大的在前，这样在事件分发时就会先获取。
+
+接着`sticky`:
+
+再说sticky之前，我们应该先看看[Sticky Event](http://greenrobot.org/eventbus/documentation/configuration/sticky-events/),不然下面的分析会很模糊不清晰。
+
+看完之后我觉得Sticky Event的设计初衷是：当我们post一个event时，订阅了的subcriber都会收到信息并进行相应的操作，这没问题，可是我的需求还没完，我还需要在创建一个对象如Activity之后再次使用event携带的信息，这下怎么办呢。换做是我会先把这些信息存起来等着用，好消息EventBus已经用sticky机制帮我们实现了！而且根据官方文档这个机制的实质是在内存中存储这个event，那么在哪里存储的呢？用什么存储的呢？我们看看官方提到的：EventBus.getDefault().postSticky(event)：
+
+```java
+ public void postSticky(Object event) {
+        synchronized (stickyEvents) {
+            stickyEvents.put(event.getClass(), event);
+        }
+        // Should be posted after it is putted, in case the subscriber wants to remove immediately
+        post(event);
+    }
+```
+原来就是用的stickyEvents这个map存储的。
+
+我们做个小demo，在一个对象如Activity中先调用EventBus.getDefault().postSticky(new MessageEvent("Hello everyone!"))，再调用EventBus.register，结果如何呢？从结果可以预想在register（更准确的说应该是subscribe）中肯定会有post的调用。带着这个设想，我们继续看subcribe方法：
+
+```java
+if (subscriberMethod.sticky) {
+    if (eventInheritance) {
+        // Existing sticky events of all subclasses of eventType have to be considered.
+        // Note: Iterating over all events may be inefficient with lots of sticky events,
+        // thus data structure should be changed to allow a more efficient lookup
+        // (e.g. an additional map storing sub classes of super classes: Class -> List<Class>).
+        Set<Map.Entry<Class<?>, Object>> entries = stickyEvents.entrySet();
+        for (Map.Entry<Class<?>, Object> entry : entries) {
+            Class<?> candidateEventType = entry.getKey();
+            if (eventType.isAssignableFrom(candidateEventType)) {
+                Object stickyEvent = entry.getValue();
+                checkPostStickyEventToSubscription(newSubscription, stickyEvent);
+            }
+        }
+    } else {
+        Object stickyEvent = stickyEvents.get(eventType);
+        checkPostStickyEventToSubscription(newSubscription, stickyEvent);
+    }
+  }
+```
+这里的四行注释，你看懂了多少，如果很少，那么用有道查查你不认识的单词吧，再读读。此时你已经站在必须读懂这些注释的路口了。
+
+我来说说我的理解吧，抛砖引玉：
+event和其子类中存在的sticky events应该在继承关系中被考虑。在迭代的过程中，所有的event可能会因为大量的sticky events变得低效，为了使得查询变得高效应该改变数据结构，例如增加一个map来存储一个superclass的subclass，map<Superclass,List<Subclass>>表面的意思看懂了，可还是不懂真正的意思，接着往下看：eventInheritance，初始化是在EventBusBuilder中，初始值是true。
+
+比较有意思的是`stickyEvents.entrySet()`，这个的用处就是为了既可以获取key，也可以获取value。
+
+传送一下[Map遍历方式](http://www.sergiy.ca/how-to-iterate-over-a-map-in-java)
+
+
+
+这里又碰到了`eventType.isAssignableFrom(candidateEventType)`这个方法，我感觉这里应该是多态的原因，如果postSticky()的参数是subMessageEvent,那么@Subscribe注解方法中的参数是SupMessageEvent也可以接收到此消息。
+
+这里找到stickyEvent之后会`checkPostStickyEventToSubscription(newSubscription, stickyEvent);`接着在这个方法里又会调用postToSubscription,这验证了之前的猜想，确实会在subcribe中post stickyEvent。有木有一种柯南的成就感呢？
+
+到这里subscribe已经结合我们的猜想全部讲解完，下面我们接着讲最后一个post的细节

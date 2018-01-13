@@ -1,0 +1,175 @@
+---
+layout:     post
+title:      "Gradle Task"
+author:     "CoXier"
+header-img: "img/gradle.jpg"
+tags:
+
+- Gradle
+---
+
+# 一、Task 概述
+Gradle 有两个很基础的对象 project 和 task 。每个 Gradle 构建工程有一个或多个 project，project 由多个 task 组成。task 之间可以存在依赖关系，也可以定义执行顺序。从面向对象角度来看，task 是某个类型 Task 的一个实例。如 Android 工程，每个 Module （包括 root）都会有一个 `build.gradle`, 这是 Gradle 默认的 build 配置文件，根据 build.gradle 文件可以初始化 project 对象以及该 project 下的若干个 task。
+
+本文将从五个方面来梳理 Task ：
+
+* 一、定义 task
+* 二、task 依赖关系
+* 三、task 间的执行顺序 mustRunAfter
+* 四、自定义 Task
+
+# 二、定义 task
+
+```java
+project.task("task1")
+
+task("task2")
+
+task task3{
+  description "Task3"
+  //or description("task3")、description = "task3"
+  group "UniqueStudio"
+  // or group("UniqueStudio")、group = "UniqueStudio"
+
+
+  doLast{
+    println "HelloWorld"
+  }
+
+}
+```
+`task3` 的声明方式是最常用的。gradle 为了方便开发者管理 project 中的 task，定义了属性 `group`。为了描述某个 task 的任务，定义了 description 。
+
+使用`gradle tasks`查看当前 project 的 tasks,输出如下：
+
+```java
+UniqueStudio tasks
+------------------
+task3 - Task3
+```
+要查看 task1 task2，使用 `gradle tasks --all`
+
+#  三、Task 依赖关系
+
+## 3.1 dependsOn
+> 定义：如果 task A 没有 task B 无法正常工作，则称 A dependsOn B，所以也隐含了 B 运行在 A 之前。
+
+例如穿鞋应该 dependsOn 穿袜子：
+
+```java
+task putOnSocks {
+    doLast {
+        println "Putting on Socks."
+    }
+}
+
+task putOnShoes {
+    dependsOn "putOnSocks"
+    doLast {
+        println "Putting on Shoes."
+    }
+}
+```
+除了上述的声明方式外，还有另外几种。
+
+### 3.1.1 Adding dependency on task from another project
+
+```java
+project('projectA') {
+    task taskX(dependsOn: ':projectB:taskY') {
+        doLast {
+            println 'taskX'
+        }
+    }
+}
+
+project('projectB') {
+    task taskY {
+        doLast {
+            println 'taskY'
+        }
+    }
+}
+```
+除了同一个 project 下的 task 可以声明依赖关系，不同 project 间的 task 也可以声明依赖关系。每一个 task 的完整名 ： `:currentProject:taskA`。
+
+### 3.1.2 Adding dependency using task object
+
+```java
+task taskX {
+    doLast {
+        println 'taskX'
+    }
+}
+
+task taskY {
+    doLast {
+        println 'taskY'
+    }
+}
+
+taskX.dependsOn taskY
+```
+通过 task 对象直接声明依赖关系。这个方式特别有用，有些 gradle plugin 内置了一些 task，我们想在已有的 task 基础上做些事情，比如在 `assembleDebug` 运行之前检查代码规范。
+
+## 3.3 mustRunAfter
+> A 和 B 单独执行并不存在依赖关系，但是如果需要同时执行，则 A 必须在 B之后，则就说 A mustRunAfter B
+
+定义看上去略有些抽象，先看个小例子。
+
+```java
+task taskA {
+  doLast{
+    println "from A"
+  }
+}
+
+task taskB {
+  doLast{
+    println "from B"
+  }
+}
+
+taskB.mustRunAfter taskA
+```
+执行 taskB 和 taskA，输出结果：
+
+```java
+gradle -q taskB taskA
+from A
+from B
+```
+虽然输入时 taskB 在前，但是因为声明了 `taskB.mustRunAfter taskA`,所以 taskA 先执行。另外需要说明，taskA 和 taskB 没有依赖关系，他们可以独自被执行。这也是 `mustRunAfter` 和 `dependsOn` 的最大区别：`dependsOn` 侧重指定哪些 task 需要被执行，而且这些 task 执行有一定顺序；而 `mustRunAfter` 侧重强调多个 task 同时执行时的顺序。
+
+# 五、自定义 Task
+自定义 Task 只需要继承 DefaultTask，下面的例子是对上面几部分的一个总结。
+
+```java
+class GreetingToFileTask extends DefaultTask {
+
+    def destination
+
+    File getDestination() {
+        project.file(destination)
+    }
+
+    @TaskAction
+    def greet() {
+        def file = getDestination()
+        file.parentFile.mkdirs()
+        file.write "Hello!"
+    }
+}
+
+task greet(type: GreetingToFileTask) {
+    destination = { project.greetingFile }
+}
+
+task sayGreeting(dependsOn: greet) {
+    doLast {
+        println file(greetingFile).text
+    }
+}
+
+ext.greetingFile = "$buildDir/hello.txt"
+```
