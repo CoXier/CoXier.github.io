@@ -43,18 +43,18 @@ Style 的定义是通过 xml 文件来实现的，这个 xml 文件必须放在 
 - 通过 `name` 来唯一标识一个 Style，相当于 key-value 中的 key
 - 前面说到 Style 是属性的集合，集合的一个子元素也就是 `<item></item>`
 
-定义了 Style 之后，使用：
+定义了 Style 之后，可以应用此 Style 到多个 View 上，后期修改属性也减少了重复工作。
 
 ```java
 <TextView
     style="@style/CodeFont"
     android:text="@string/hello" />
 ```
-有木有觉得很方便。
+
 
 ### 1.1.2 Style 继承关系
 Style 间可以存在继承关系，和面向对象语言中的继承类似，继承之后按照需要，对自己想要的属性进行重新「赋值」。继承分为两种类型：
-- 继承 Android 内置 Style，需要使用 `parent` 关键字指明继承的对象
+- 继承 Android 内置 Style，需要使用 `parent` 关键字指明继承的对象，见 `1.1.1`
 - 继承自定义 Style，规则上更随意，可采取下面的方式：
 
 ```java
@@ -84,7 +84,31 @@ Style 的「作用域」是他修饰的 View，ViewGroup 并不能对它的子 V
 
 </RelativeLayout>
 ```
-给 RelativeLayout 指定了 Style，在 `@style/CustomLayout` 中定义了 textSize，但是发现对其子 View 并不能起到作用。如果想让某个 style 作用应用或者 Activity 的 View，那就可以考虑使用 Theme 了。需要说明的是 Theme 的作用对象是 Window，Activity 或者 Application 。像下面这样：
+给 RelativeLayout 指定了 Style，在 `@style/CustomLayout` 中定义了 textSize，但是对其子 TextView 的字体大小并没有起到作用。如果需要应用在 ViewGroup 的 style 起到作用，那么就可以考虑 Theme 了。定义 Theme 和 Style 类似。
+
+```java
+<style name="CustomLayoutTheme">
+    <item name="android:textSize">20sp</item>
+</style>
+```
+
+```java
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    android:theme="@style/CustomLayoutTheme"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Hello World!"/>
+
+</RelativeLayout>
+```
+这样 CustomLayoutTheme 就可以控制 TextView 的字体大小了。
+
+> Theme 下的 item 颜色属性仅支持对另一资源的引用，不支持字面常量。
 
 ```java
 <color name="custom_theme_color">#b0b0ff</color>
@@ -93,10 +117,9 @@ Style 的「作用域」是他修饰的 View，ViewGroup 并不能对它的子 V
     <item name="android:colorBackground">@color/custom_theme_color</item>
 </style>
 ```
-> Theme 下的 item 颜色属性仅支持对另一资源的引用，不支持字面常量。
 
 ### 1.2.1 根据系统版本选择 Theme
-Android 的系统版本升级后，会有一些内置的功能上很赞的主题，如从 Android-Lollipop 开始，Android 开始推广 MD 设计，但是为了兼容低版本，又不能直接使用。和「多语言」类似的处理方法：新建 `res/values-v11` (支持 API 11及以上)。
+Android 的系统版本升级后，会有一些内置的功能上很赞的主题，如 Android 从 Lollipop 开始推广 MD 设计，但是为了兼容低版本，又不能直接使用。和「多语言」类似的处理方法：新建 `res/values-v11` (支持 API 11及以上)。
 
 # 二、View Constructors
 View 有4个构造方法，经常用到的是下面两个：
@@ -121,7 +144,7 @@ public View(Context context, @Nullable AttributeSet attrs)
 ## 2.1 Attribute
 「技术支撑业务」，每一个自定义 View 都有着特定的业务需求场景，需要一些特定的  Attribute 来满足业务需求，例如动画的时间、圆环的宽度等等。在日常的开发中，我们会经常用到诸如 TextView，ImageView 等基础控件，以 ImageView 为例，我们可以在 xml 中很方便设置 `android:src="xxx"`，那你可曾想过为什么在 xml 文件中可以指定 `src` 等属性的值呢？
 
-Android 源码通过 `<declare-styleable name="ImageView">` 标签定义了 ImageView  的属性，及这些属性的类型。详见： **frameworks/base/core/res/res/values/attrs.xml** 
+Android 源码通过 `<declare-styleable name="ImageView">` 标签声明了 ImageView 的属性。详见： **frameworks/base/core/res/res/values/attrs.xml**
 
 ```xml
 <declare-styleable name="ImageView">
@@ -147,13 +170,13 @@ Android 源码通过 `<declare-styleable name="ImageView">` 标签定义了 Imag
     <attr name="tintMode" />
 </declare-styleable>
 ```
-Android 系统在 make build 的过程中，会生成 `com.android.internal.R.styleable.ImageView`，每一个 Attribute Item 生成 `R.styleable.ImageView_xxx` ，如 src 属性就会被表示成 `R.styleable.ImageView_src`。注意其实 attribute 的定义不一定需要在 <declare-styleable> 定义。
+Android 系统在 make build 的过程中，会生成 `com.android.internal.R.styleable.ImageView`，每一个 Attribute Item 生成 `R.styleable.ImageView_xxx` ，如 src 属性就会被表示成 `R.styleable.ImageView_src`。注意其实 attribute 的定义不一定需要在 &lt;declare-styleable&gt; 定义。
 
 > 上面的代码对于属性的定义很规范也很全面，之后写自定义 View 非常值得借鉴。
 
 
 ## 2.2 AttributeSet
-形如下面的布局文件，定义了基本的宽高等属性，如何获取这些**属性值**呢？我们在代码中无法直接获取，Android 将这些属性值通过 AttributeSet 传递。AttributeSet 是**属性值**的集合，Attribute 是集合中每一个 item 的 key。
+形如下面的布局文件，定义了基本的宽高等属性，如何获取这些属性的值呢？我们在代码中无法直接获取，Android 将这些属性值通过 AttributeSet 传递。AttributeSet 是属性值的集合，Attribute 是集合中每一个 item 的 key。
 
 ```java
 <ImageView
@@ -207,7 +230,7 @@ public SwitchCompat(Context context, AttributeSet attrs) {
 }
 ```
 
-之前说过 defStyleAttr 是一个 attribute，所以这里的 `R.attr.switchStyle` 也是一个 attribute，Android 源码对 switchStyle 的定义详见 **frameworks/base/core/res/res/values/attrs.xml**
+之前说过 defStyleAttr 是一个 attribute，所以这里的 `R.attr.switchStyle` 也是一个 attribute，Android 源码对 switchStyle 的声明详见 **frameworks/base/core/res/res/values/attrs.xml**
 
 ```java
 <declare-styleable name="Theme">
