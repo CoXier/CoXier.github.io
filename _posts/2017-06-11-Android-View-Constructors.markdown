@@ -55,17 +55,27 @@ Style 的定义是通过 xml 文件来实现的，这个 xml 文件必须放在 
 ### 1.1.2 Style 继承关系
 Style 间可以存在继承关系，和面向对象语言中的继承类似，继承之后按照需要，对自己想要的属性进行重新「赋值」。继承分为两种类型：
 - 继承 Android 内置 Style，需要使用 `parent` 关键字指明继承的对象，见 `1.1.1`
-- 继承自定义 Style，规则上更随意，可采取下面的方式：
+- 继承自定义 Style，规则上更随意，可采取下面的方式继承 Style:CodeFont
 
 ```java
-<style name="CodeFont.Red">
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CodeFont" parent="@android:style/TextAppearance.Medium">
+        <item name="android:layout_width">fill_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#00FF00</item>
+        <item name="android:typeface">monospace</item>
+    </style>
+
+    <style name="CodeFont.Red">
     <item name="android:textColor">#FF0000</item>
 </style>
+</resources>
 ```
 > 除了通过「名字前缀」来表明继承关系，当然也可以通过 `parent` 来声明。
 
 ### 1.1.3 Style 属性
-相应的类引用最便于查找某些 View 的属性，例如上面例子中的 TextView 就可以查找 [TextView 属性表](https://developer.android.com/reference/android/widget/TextView.html?hl=zh-cn#lattrs)。
+相应的 类引用 最便于查找某些 View 的属性，例如上面例子中的 TextView 就可以查找 [TextView 属性表](https://developer.android.com/reference/android/widget/TextView.html?hl=zh-cn#lattrs)。
 
 ## 1.2 Theme
 Style 的「作用域」是他修饰的 View，ViewGroup 并不能对它的子 View 产生作用。比如下面代码：
@@ -84,7 +94,7 @@ Style 的「作用域」是他修饰的 View，ViewGroup 并不能对它的子 V
 
 </RelativeLayout>
 ```
-给 RelativeLayout 指定了 Style，在 `@style/CustomLayout` 中定义了 textSize，但是对其子 TextView 的字体大小并没有起到作用。如果需要应用在 ViewGroup 的 style 起到作用，那么就可以考虑 Theme 了。定义 Theme 和 Style 类似。
+给 RelativeLayout 指定了 Style，在 `@style/CustomLayout` 中定义了 textSize，但是对其子 TextView 的字体大小并没有起到作用。如果需要应用在 ViewGroup 的 style 起到作用，那么就可以考虑 Theme 了。定义 Theme 和 Style 一样，其实本质而言 Theme 也是 Style。
 
 ```java
 <style name="CustomLayoutTheme">
@@ -108,7 +118,7 @@ Style 的「作用域」是他修饰的 View，ViewGroup 并不能对它的子 V
 ```
 这样 CustomLayoutTheme 就可以控制 TextView 的字体大小了。
 
-> Theme 下的 item 颜色属性仅支持对另一资源的引用，不支持字面常量。
+注意：**Theme 下的 item 颜色属性仅支持对另一资源的引用，不支持字面常量。**
 
 ```java
 <color name="custom_theme_color">#b0b0ff</color>
@@ -117,10 +127,6 @@ Style 的「作用域」是他修饰的 View，ViewGroup 并不能对它的子 V
     <item name="android:colorBackground">@color/custom_theme_color</item>
 </style>
 ```
-
-### 1.2.1 根据系统版本选择 Theme
-Android 的系统版本升级后，会有一些内置的功能上很赞的主题，如 Android 从 Lollipop 开始推广 MD 设计，但是为了兼容低版本，又不能直接使用。和「多语言」类似的处理方法：新建 `res/values-v11` (支持 API 11及以上)。
-
 # 二、View Constructors
 View 有4个构造方法，经常用到的是下面两个：
 
@@ -142,7 +148,7 @@ public View(Context context, @Nullable AttributeSet attrs)
 此构造方法用于从布局文件创建 View。在这个构造函数中，出现了 AttributeSet，从表面意思上来看这个参数代表了属性集合，在了解 AttributeSet 前先了解一下 Attribute。
 
 ## 2.1 Attribute
-「技术支撑业务」，每一个自定义 View 都有着特定的业务需求场景，需要一些特定的  Attribute 来满足业务需求，例如动画的时间、圆环的宽度等等。在日常的开发中，我们会经常用到诸如 TextView，ImageView 等基础控件，以 ImageView 为例，我们可以在 xml 中很方便设置 `android:src="xxx"`，那你可曾想过为什么在 xml 文件中可以指定 `src` 等属性的值呢？
+「技术支撑业务」，每一个自定义 View 都有着特定的业务需求场景，需要一些特定的 Attribute 来满足业务需求，例如动画的时间、圆环的宽度等等。在日常的开发中，我们会经常用到诸如 TextView，ImageView 等基础控件，以 ImageView 为例，我们可以在 xml 中很方便设置 `android:src="xxx"`，那你可曾想过为什么在 xml 文件中可以指定 `src` 等属性的值呢？
 
 Android 源码通过 `<declare-styleable name="ImageView">` 标签声明了 ImageView 的属性。详见： **frameworks/base/core/res/res/values/attrs.xml**
 
