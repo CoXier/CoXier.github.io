@@ -173,7 +173,7 @@ RxJava 的事件流可以分为三部分：
 * **ObserveOnObserver 为了向 LambdaObserver 发送数据时切换线程，用到了 worker#schedule**
 * ObserveOnObserver 实现了 Runnable 接口，在 ObserveOnObserver 执行 run 时，将队列的数据出队，然后向 LambdaObserver 发送。
 
-## 3.2.1 RxAndroid
+## 3.3 RxAndroid
 
 在 Android 中使用 RxJava 时大多数 observeOn 场景是期望发生在 main thread 来更新 UI，RxAndroid 提供了 `observeOn(AndroidSchedulers.mainThread()) ` 。具体实现原理是自定义了 HandlerScheduler 和 HandlerWorker，在 3.2 中我们知道 observeOn 具体实现是依靠 Worker#schedule。
 
