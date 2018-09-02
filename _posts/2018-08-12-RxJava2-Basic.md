@@ -3,7 +3,8 @@
 layout:     post
 title:      "RxJava Basic"
 author:     "CoXier"
-header-img: "https://images-cdn.shimo.im/vBhbxDllRBgqA17X/stephan_zabini_775109_unsplash.jpg"
+catalog:      true
+header-img: "https://cdn.ruguoapp.com/Fu8rbxYCO96ErJzY1XHm_4DsQj8e.jpg"
 tags:
 
 - RxJava
@@ -11,16 +12,15 @@ tags:
 
 # RxJava 入门分享
 
+# 一、Reactive Stream in RxJava2
+
 RxJava 遵循了 [ReactiveStreams]( https://github.com/reactive-streams/reactive-streams-jvm) 的定义，一些重要的设计思想写在了 README，定义了四个关键概念：
 
 - Publisher：发送数据
 
-
 - Subscriber：接收数据
 
-
 - Subscription：描述 publisher 和 subscriber 的关系，而且只受 subscriber 的控制
-
 
 - Processor：数据处理阶段，包括发送前的处理，和接收后的处理
 
@@ -31,8 +31,6 @@ Publisher 将数据发送给 Subscriber，Subscriber 处理数据流按顺序执
 Subscrier 执行一次 onSubscribe，可能执行 0 次或者多次 onNext。一个好的事件流应该需要一次 onError 或者 一次 onComplete。Reactive Stream 常见的图示：
 
 ![img](https://raw.github.com/wiki/ReactiveX/RxJava/images/rx-operators/legend.png)
-
-# 一、Reactive Stream in RxJava2
 
 在 RxJava 2.x 中，reactive class 有 Flowable、Observable、Single、Maybe、Completable，他们类似上面提到的 Publisher，起到发送数据的作用，其中 Flowable 实现了 Publisher 的接口，具备了 Backpressure，而 Observable 等其他的 reactive class 从 Flowable 衍生而来，不具备 Backpressure。
 
@@ -66,7 +64,7 @@ RxJava 的方法数多的原因之一是其拥有大量的操作符，RxJava 中
 使用 fromArray 小试牛刀，创建一个 Observable 按照顺序发送两个字符串 "jianxin" 和 "fucheng"，Observer 收到字符串后打印出来，当 Observable 发送完后，下游打印 "onComplete"，也就是遵循 onSubscribe onNext*2  onComplete 的协议。
 
 
-![img](https://cdn.ruguoapp.com/FpNFib-RIwRU8X3Y5iPToyMaPc5V.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![img](https://cdn.ruguoapp.com/FpNFib-RIwRU8X3Y5iPToyMaPc5V.png)
 
 
 上面的代码可以分成 3 个部分来看：
@@ -77,25 +75,25 @@ RxJava 的方法数多的原因之一是其拥有大量的操作符，RxJava 中
 
 subscribe(Observer) 实际上调用的是 subscribeActual(Observer)，subscribeActual 是一个抽象方法，所以调用的是 `ObservableFromArray#subscribeActual` 见下图。然后循环发射调用 observer#onNext，如果中间遇到 error，就调用 observer#onError，如果顺利地发射完所有数据，则调用 observer#onComplete。
 
-![img](https://cdn.ruguoapp.com/FrTHEM4QsHHsD_z4OiCkmtMm9p-Z.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![img](https://cdn.ruguoapp.com/FrTHEM4QsHHsD_z4OiCkmtMm9p-Z.png)
 
 
 
 ## 2.2 Filtering——过滤操作符
 
-![img](https://images-cdn.shimo.im/zFnVdrBBsKQpBpRg/2.png!thumbnail)
+![img](https://cdn.ruguoapp.com/FgkJyHh9A_1oux1hezlqkqleP-Oz.png)
 
 RxJava 有很多过滤操作符，但是出发点都是过滤出 Observer 需要的数据。例如上面的代码，Observer 只想获取以字母 `j` 开头的 name。
 
 再来一个稍微复杂一点的例子，下游只需要 `j` 开头的 name ，并且相同的 name 只接收一次，这个时候就可以使用操作符 [Distinct ](http://reactivex.io/documentation/operators/distinct.html) 进行去重操作。
 
-![img](https://images-cdn.shimo.im/xHyA9kyWk0IZ3Hox/3.png!thumbnail)
+![img](https://cdn.ruguoapp.com/FinIQfbbnaYblZaLwxn_jMmcMIGD.png)
 
 ## 2.3 Observable Transformation——转换操作符
 
 RxJava 能转换 Observable 发出的数据，经过变换后交给 Observer 处理。下面有个例子，上游发送了 1， 2， 3 三个数据，经过 [map](http://reactivex.io/documentation/operators/map.html) 操作符处理后，下游接收到的是 20，40 ，60。
 
-![](https://images-cdn.shimo.im/wtCELXbBsxk9llRs/carbon_1_.png!thumbnail)
+![](https://cdn.ruguoapp.com/Fgopfe0Ncuz40b_eLr-jJL777t_m.png)
 
 常见的变换操作符有：
 
@@ -104,11 +102,11 @@ RxJava 能转换 Observable 发出的数据，经过变换后交给 Observer 处
 
 上面已经介绍了 map 的使用，下面再来看看如何使用 flatMap 也将上游发送的数据每个增大 20 倍。
 
-![](https://images-cdn.shimo.im/RKRAjAw4YW0F0qrG/carbon_2_.png!thumbnail)
+![](https://cdn.ruguoapp.com/Fhjw90Xj5mKWFgSEXEhzX52v-Y3g.png)
 
 大多数情况下，map 和 flatMap 都能实现一样的功能，**但是 flatMap 可以用来做一些和异步有关的事情**，但可能 map 无法做到。比如我们同时获取了一系列用户的 userId，然后希望通过这些 userId 分别请求每个用户的详细信息 UserInfo，每请求到一个 UserInfo 就更新相应的 UI，请求用户详细信息属于网络异步操作，所以应该不必等到所有的请求完成才更新 UI。
 
-![](https://images-cdn.shimo.im/ALUflCVm1vUuPVHY/carbon_3_.png!thumbnail)
+![](https://cdn.ruguoapp.com/Fu4BQkxCaSa8r0oMNgiqCq49gOb8.png)
 
 这里为了说明 flatMap 对于异步操作的支持，我们把每个数据转换为一个 Observable，但 Observable 会进行 delay 操作，传入的数据越大，延迟反而越小，最终，我们将看到完全逆序的事件处理。但是如果使用 map 操作，请求用户信息就会挨个排队，只有前一个完成后面才能继续，**当所有的转换（请求）完成之后，下游才能收到数据**。
 
@@ -118,7 +116,7 @@ RxJava 能转换 Observable 发出的数据，经过变换后交给 Observer 处
 
 这个需求的关键点在于需要在两个接口的数据都返回时再做查找操作，常规写法应该会借助 Thread 和 Handler 这样写：
 
-![](https://cdn.ruguoapp.com/FoFrd0dzDd0XjUIlW5NZMnqZ1A2n.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![](https://cdn.ruguoapp.com/FoFrd0dzDd0XjUIlW5NZMnqZ1A2n.png)
 
 上面的代码省略了 UI 线程更新的具体逻辑，UI线程更新还是需要借助 Handler ，一次 sendMessage 和 handlerMsg，其实代码是很**分散**的。如果换用 RxJava + Retrofit + RxJava2CallAdapter 整个流程就会收敛到一条线上。 [zip](http://reactivex.io/documentation/operators/zip.html) 操作符通过一个函数将多个 Observable 发出的数据结合为一个新的数据。
 
@@ -130,11 +128,11 @@ RxJava 线程切换特别方便，subscribeOn 指定 observable 发射数据所�
 
 下面结合一个 demo 来分析 RxJava 是如何切换发送数据和处理数据所在的线程。
 
-![](https://cdn.ruguoapp.com/FuwmCKcpea1LnlZEMjBruQX9YJ5q.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![](https://cdn.ruguoapp.com/FuwmCKcpea1LnlZEMjBruQX9YJ5q.png)
 
 在 RxJava 中将发送数据的一方叫做 **upstream**，接收数据的一方叫 **downstream**。如：
 
-![img](https://images-cdn.shimo.im/SV3uIdMoz0MZzRlC/%E4%B8%8B%E8%BD%BD.png!thumbnail)
+![img](https://cdn.ruguoapp.com/Fod59SAanlixkPsrNQmA4TfL9Ba2.png)
 
 在多个操作符链式调用的时候，站在 operator2() 的角度，左侧就是 **upstream** , 右侧是 **downstream**。所以在上面的 Demo 中，ObservableFromArray 的 downstream 是 ObservableSubscribeOn，ObservableSubscribeOn 的 downstream 是 ObservableObserveOn，ObservableSubscribeOn 的 upstream 是 ObservableFromArray。
 
@@ -158,7 +156,7 @@ RxJava 的事件流可以分为三部分：
 
 ## 3.1 订阅事件
 
-![](https://cdn.ruguoapp.com/FsfQlX9DS2ycwDCRbGmZuBOw7Pdo.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![](https://cdn.ruguoapp.com/FsfQlX9DS2ycwDCRbGmZuBOw7Pdo.png)
 
 
 * 在 ObservableObserveOn#subscribeActual 会调用 upstream ObservableSubcribeOn#subscribe
@@ -167,7 +165,7 @@ RxJava 的事件流可以分为三部分：
 
 ## 3.2 接收事件
 
-![](https://cdn.ruguoapp.com/Fo3f04VqOrNsx9ONbmLwROAb1o0h.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![](https://cdn.ruguoapp.com/Fo3f04VqOrNsx9ONbmLwROAb1o0h.png)
 
 * 3.1 中讲到 ObservableFromArray 是数据源头，ObservableFromArray 的 downstream 是 ObservableSubscriberOn，所以第一个接收到事件源发出数据的是 SubscribeOnObserver。
 * SubscribeOnObserver#onNext 将数据发送给 ObserveOnObserver。
@@ -179,6 +177,6 @@ RxJava 的事件流可以分为三部分：
 
 在 Android 中使用 RxJava 时大多数 observeOn 场景是期望发生在 main thread 来更新 UI，RxAndroid 提供了 `observeOn(AndroidSchedulers.mainThread()) ` 。具体实现原理是自定义了 HandlerScheduler 和 HandlerWorker，在 3.2 中我们知道 observeOn 具体实现是依靠 Worker#schedule。
 
-![](https://cdn.ruguoapp.com/FsEdmCg1TGjzu2qnuCpWo1nvQ9Vj.png?imageMogr2/auto-orient/heic-exif/1/thumbnail/2500x9999%3E)
+![](https://cdn.ruguoapp.com/FsEdmCg1TGjzu2qnuCpWo1nvQ9Vj.png)
 
 将 ObserverOnObserver 赋值给 Message#callback，然后 Handler 将 Message send 出去，delay 一定时间后从 Looper#loop 取出数据，然后 ObserverOnObserver#run 即运行在 main thread 。
