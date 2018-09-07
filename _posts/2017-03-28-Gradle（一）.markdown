@@ -2,7 +2,7 @@
 layout:     post
 title:      "Gradle Basic"
 author:     "CoXier"
-header-img: "img/gradle.jpg"
+header-img: "https://cdn.ruguoapp.com/FtIYYF6rnQLvMyloJpnHqtWZ9AkI.jpg"
 tags:
 
 - Gradle

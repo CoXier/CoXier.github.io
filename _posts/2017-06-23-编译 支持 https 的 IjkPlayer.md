@@ -2,7 +2,7 @@
 layout:     post
 title:      "编译 IjkPlayer"
 author:     "CoXier"
-header-img: "img/post-bg.jpg"
+header-img: "https://cdn.ruguoapp.com/FlZsV6SHbgAkS3bTzJrZ1KGtIP1V.jpg"
 tags:
 
 - 视频

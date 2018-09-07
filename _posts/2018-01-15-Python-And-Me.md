@@ -2,7 +2,7 @@
 layout:     post
 title:      "Python 虚拟环境和包管理"
 author:     "CoXier"
-header-img: "img/post-bg.jpg"
+header-img: "https://cdn.ruguoapp.com/FlZsV6SHbgAkS3bTzJrZ1KGtIP1V.jpg"
 tags:
 
 - Python

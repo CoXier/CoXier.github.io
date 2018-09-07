@@ -2,7 +2,7 @@
 layout:     post
 title:      "JSON 与 Protobuf"
 author:     "CoXier"
-header-img: "img/post-bg.jpg"
+header-img: "https://cdn.ruguoapp.com/FlZsV6SHbgAkS3bTzJrZ1KGtIP1V.jpg"
 tags:
 
 - 计算机基础

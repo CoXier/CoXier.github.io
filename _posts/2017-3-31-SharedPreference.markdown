@@ -2,7 +2,7 @@
 layout:     post
 title:      "Android 数据持久化（一）"
 author:     "CoXier"
-header-img: "img/post-bg.jpg"
+header-img: "https://cdn.ruguoapp.com/FtIYYF6rnQLvMyloJpnHqtWZ9AkI.jpg"
 tags:
 
 - Android

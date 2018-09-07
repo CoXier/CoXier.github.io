@@ -2,7 +2,7 @@
 layout:     post
 title:      "View事件分发"
 author:     "CoXier"
-header-img: "img/post-bg.jpg"
+header-img: "https://cdn.ruguoapp.com/FidDe11rkwVJnIXbZRQij6wc734U.jpg"
 tags:
 
 - 源码解析
