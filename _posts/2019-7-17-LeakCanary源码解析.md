@@ -2,7 +2,7 @@
 layout:     post
 title:      "LeakCanary源码分析"
 author:     "CoXier"
-header-img: "https://ws1.sinaimg.cn/large/005Jy4VLly1g52nxu98kdj31mc12wdsz.jpg"
+header-img: "https://gitee.com/coxier/tuchuang/raw/master/photo-1443890923422-7819ed4101c0.jpeg"
 tags:
 
 - Android
