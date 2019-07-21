@@ -1,20 +1,50 @@
 ---
 layout:     post
-title:      "LeakCanary源码分析"
+title:      "LeakCanary源码解析（一）"
 author:     "CoXier"
 header-img: "https://gitee.com/coxier/tuchuang/raw/master/photo-1443890923422-7819ed4101c0.jpeg"
 tags:
 
 - Android
-- 源码分析
+- 源码解析
 - 内存泄漏
 ---
 
 本次源码解析的 commit 是：660d6742fccda2f9f3f84a8c4acc437412a262a3
 
-#一、Detecting retained instances
+# 一、LeakCanary 初始化
 
-探测 retained 实例是检查内存泄漏的第一步，探测的时机有：Activity/Fragment destroyed，负责这个功能的模块是：leaksentry，leaksentry 依赖了 watcher。ActivityDestroyWatcher 负责 Activity 的探测，AndroidOFragmentDestroyWatcher 负责 Fragment 的探测。
+LeakCanary 是通过 ContentProvider 初始化的，目前很多第三方库比如 picasso 都采用了这种方式进行初始化，这种初始化有个好处，可以避免入侵使用方的代码。具体方式如下：
+
+* 自定义 ContentProvider，如 LeakSentryInstaller，然后在 onCreate 方法中执行第三方库的初始化操作
+* 在 AndroidManifest.xml 中声明 ContentProvider
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.squareup.leakcanary.leaksentry"
+    >
+
+  <application>
+    <provider
+        android:name="leakcanary.internal.LeakSentryInstaller"
+        android:authorities="${applicationId}.leak-sentry-installer"
+        android:exported="false"/>
+  </application>
+</manifest>
+```
+
+通过[官方](<https://square.github.io/leakcanary/fundamentals/>)可以了解到 LeakCanary 工作原理是由哪几步构成的：
+
+* Detecting retained instances： 探测存活的实例
+* Dumping the heap：将发生内存泄漏时的 java heap dump 到 `.hprof` 文件中
+* Analyzing the heap：分析 `.hprof` 文件，找到内存泄漏的路径
+* Grouping leaks：有一些内存泄漏是同一个原因造成，LeakCanary 会将这些归类
+
+# 二、Detecting retained instances
+
+探测 retained 实例是检查内存泄漏的第一步，探测的时机是 Activity/Fragment destroyed，负责这个功能的模块是 leaksentry，leaksentry 依赖了 watcher。ActivityDestroyWatcher 负责 Activity 的探测，AndroidOFragmentDestroyWatcher 负责 Fragment 的探测，LeakCanary 的探测都是无侵入式的，借助了 Android Framework 提供的 Activity/Fragment 生命回调。
 
 Activity 的触发时机：
 
@@ -29,35 +59,7 @@ Activity 的触发时机：
     }
 ```
 
-这里使用了 kotlin 的语言特性委托代理，在之前的 Java 版本是空实现方法：
-
-```java
-public abstract class ActivityLifecycleCallbacksAdapter
-    implements Application.ActivityLifecycleCallbacks {
-  @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
-  }
-
-  @Override public void onActivityStarted(Activity activity) {
-  }
-
-  @Override public void onActivityResumed(Activity activity) {
-  }
-
-  @Override public void onActivityPaused(Activity activity) {
-  }
-
-  @Override public void onActivityStopped(Activity activity) {
-  }
-
-  @Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
-  }
-
-  @Override public void onActivityDestroyed(Activity activity) {
-  }
-}
-```
-
-然后复写 onActivityDestroyed。对比之下，kotlin 版本似乎更加的高级，kotlin 的委托是在编译层面做的，反编译 lifecycleCallbacks，在编译时 kotlin 会把委托的类改成内部成员静态代理的方式。
+这里使用了 kotlin 的语言特性——委托代理，在之前的 Java 版本是空实现方法，然后复写 onActivityDestroyed。对比之下，kotlin 版本似乎更加的高级，kotlin 的委托是在编译层面做的，反编译 lifecycleCallbacks，可以发现 kotlin 在编译时会把委托的类改成内部成员静态代理的方式。
 
 ```java
 public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements ActivityLifecycleCallbacks {
@@ -96,7 +98,7 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
 
 ## 1.1 RefWatcher#watch
 
-```kot
+```kotlin
   @Synchronized fun watch(
     watchedInstance: Any,
     name: String
@@ -122,7 +124,7 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
   }
 ```
 
-在新版本的 leakcanary 中很多操作都会调用 removeWeaklyReachableInstances，这个方法主要是做了这样一件事：**移除那些实例，哪些实例呢？实例是一个 WeakRef，他指向的对象被回收了**。看一下实现:
+leakcanary 中很多操作都会调用 removeWeaklyReachableInstances，这个方法主要是做了这样一件事：**移除那些实例，哪些实例呢？实例是一个 WeakRef，他指向的对象被回收了**。看一下实现:
 
 ```java
   private fun removeWeaklyReachableInstances() {
@@ -138,9 +140,9 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
   }
 ```
 
-从注释可以得知，当 WeakRef 指向的对象被回收以后，WeakRef 就会被加入 queue，果然看源码还是能学到不少东西的。如果发现 WeakRef 指向的对象已经被回收了，那么就从 watchedInstances 将 key 移除掉。
+从注释可以得知，**当 WeakRef 指向的对象被回收以后，WeakRef 就会被加入 queue**，果然看源码还是能学到不少东西的。如果发现 WeakRef 指向的对象已经被回收了，那么就从 watchedInstances 将 key 移除掉，因为已经无内存泄漏的风险。
 
-构造完 reference 后就会进行对该 reference 进行 moveToRetained 操作，checkRetainedExecutor 是包装的 handler，默认一个 runnable 是延迟 5s 执行。5s 后开始执行 moveToRetained：
+接着往下看，构造完 reference 后就会进行对该 reference 进行延迟 moveToRetained 操作，checkRetainedExecutor 是包装的 handler，默认一个 runnable 是延迟 5s 执行。5s 后开始执行 moveToRetained：
 
 ```kotlin
   @Synchronized private fun moveToRetained(key: String) {
@@ -153,26 +155,13 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
   }
 ```
 
-执行 moveToRetained 时如果发现 
-
-```
-  @Synchronized private fun moveToRetained(key: String) {
-    removeWeaklyReachableInstances()
-    val retainedRef = watchedInstances[key]
-    if (retainedRef != null) {
-      retainedRef.retainedUptimeMillis = clock.uptimeMillis()
-      onInstanceRetained()
-    }
-  }
-```
-
-执行 moveToRetained 时如果发现 watchedInstances[key] 不为 null，说明 watchedInstances[key] 指向的对象没有被回收，则表明有内存泄漏的风险，但是此时只是怀疑可能有内存风险，所以接下来开始进行更进一步的检测。
+执行 moveToRetained 时如果发现 watchedInstances[key] 不为 null，说明 watchedInstances[key] 指向的对象没有被回收，则表明有内存泄漏的风险，然后给 retainedRef#retainedUptimeMillis 赋值供之后筛选。此时只是怀疑可能有内存风险，因为在内存不紧张的情况下，可能 5s 以内对象不会被回收，所以接下来需要进行更进一步的检测——gc回收。
 
 ## 1.2 HeapDumpTrigger#onReferenceRetained
 
-当 RefWatcher 检测到可能的风险之后就会通知 HeapDumpTrigger 进行 gc 检测。主要方法是 onReferenceRetained，其实也就是调用 scheduleRetainedInstanceCheck，在 scheduleRetainedInstanceCheck 中最后调用的 checkRetainedInstances
+当 RefWatcher 检测到可能的风险之后就会通知 HeapDumpTrigger 进行 gc 检测。主要方法是 HeapDumpTrigger#onReferenceRetained，其实也就是调用 HeapDumpTrigger#scheduleRetainedInstanceCheck，在 scheduleRetainedInstanceCheck 中最后调用的 checkRetainedInstances
 
-```kot
+```kotlin
   private fun checkRetainedInstances(reason: String) {
     val config = configProvider()
 
@@ -207,7 +196,7 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
   }
 ```
 
-之前说过每次去获取留存的实例时都会进行一次 removeWeaklyReachableInstances：
+之前说过每次去获取存活的实例时都会进行一次 removeWeaklyReachableInstances：
 
 ```kotlin
   val retainedInstanceCount: Int
@@ -243,7 +232,7 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
     }
 ```
 
-通过 Runtime.getRuntime().gc() 操作 gc，然后线程 sleep 100ms 等待 WeakRef 进入 queue，100ms 是个 magic number 可能是个经验值。
+通过 Runtime.getRuntime().gc() 操作 gc，然后线程 sleep 100ms 等待 WeakRef 进入 queue，100ms 是个 magic number ，可能是个经验值。
 
 ```kotlin
   private fun checkRetainedCount(
@@ -278,7 +267,52 @@ public final class ActivityDestroyWatcher$lifecycleCallbacks$1 implements Activi
   }
 ```
 
-Dump heap 会阻塞 UI 线程，为了避免平常的开发，LeakCanary  设置了内存泄漏的实例数量阈值，默认是 5，如果在 App 在前台可见时，而且未达到阈值，则会再次 scheduleRetainedInstanceCheck，相当于一个周期任务，在一个周期任务中不断检测内存泄漏的数量。
+Dump heap 会阻塞 UI 线程，为了避免影响平常的开发，LeakCanary  设置了内存泄漏的实例数量阈值，默认是 5，如果在 App 在前台可见时，而且未达到阈值，则会再次 scheduleRetainedInstanceCheck，相当于一个周期轮训任务，在一个周期任务中不断检测内存泄漏的数量。
+
+# 三、Dumping the heap
+
+LeakCanary 使用 AndroidHeapDumper 进行 dump，使用的是 Debug#dumpHprofData，这个没啥好写的，系统提供了 Api。
+
+# 四、Analyzing the heap
+
+分析内存是通过 HeapAnalyzerService 完成的，HeapAnalyzerService 是一个前台服务，继承自 IntentService。
+
+```kotlin
+  override fun onHandleIntentInForeground(intent: Intent?) {
+    if (intent == null) {
+      CanaryLog.d("HeapAnalyzerService received a null intent, ignoring.")
+      return
+    }
+    // Since we're running in the main process we should be careful not to impact it.
+    Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+    val heapDumpFile = intent.getSerializableExtra(HEAPDUMP_FILE_EXTRA) as File
+
+    if (!heapDumpFile.exists()) {
+      throw IllegalStateException(
+          "Hprof file missing due to: [${LeakDirectoryProvider.hprofDeleteReason(
+              heapDumpFile
+          )}] $heapDumpFile"
+      )
+    }
+
+    val heapAnalyzer = HeapAnalyzer(this)
+    val config = LeakCanary.config
+
+    val exclusions = AndroidKnownReference.mapToExclusions(config.knownReferences)
+
+    val heapAnalysis =
+      heapAnalyzer.checkForLeaks(
+          heapDumpFile, exclusions, config.computeRetainedHeapSize, config.objectInspectors,
+          if (config.useExperimentalLeakFinders) config.objectInspectors else listOf(
+              AndroidObjectInspectors.KEYED_WEAK_REFERENCE
+          )
+      )
+
+    config.analysisResultListener(application, heapAnalysis)
+  }
+```
+
+在 LeakCanary 启动 HeapAnalyzerService 时，会传入一个 File 参数（原来 File 是序列化的），最后是通过 HeapAnalyzer 完成分析的。由于分析过程较为繁琐，请看下一篇。
 
 
 
