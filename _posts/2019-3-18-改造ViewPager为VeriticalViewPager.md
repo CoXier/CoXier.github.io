@@ -2,7 +2,7 @@
 layout:     post
 title:      "将ViewPager改造成VerticalViewPager"
 author:     "CoXier"
-header-img: "https://cdn.ruguoapp.com/FmKSNlibZLA9N3zTL6zHkmLcQecD.jpg"
+header-img: "https://gitee.com/coxier/tuchuang/raw/master/jike_139982097018193_pic.jpeg"
 tags:
 
 - Android
@@ -42,9 +42,9 @@ void invokeSetPagerObserver(PagerAdapter pagerAdapter, PagerObserver pagerObserv
 
 代码里面的 setViewPagerObserver 全部换成 invokeSetPagerObserver 即可
 
-# 二、实现 ViewPager 的 EdgeEffect
+# 二、实现 VerticalViewPager 的 EdgeEffect
 
-先看看原生的 ViewPager 是如何实现 EdgeEffect 的：
+在实现竖直方向 ViewPager 的 EdgeEffect 之前，先看看原生的 ViewPager 是如何实现 EdgeEffect 的：
 
 ```java
 // 最左边的 EdgeEffect
@@ -75,7 +75,10 @@ if (!mRightEdge.isFinished()) {
 
 下面的示意图：
 
-![](https://cdn.ruguoapp.com/Fozr8mSBURd5g4GT11A9kvAB1_LG.jpg)
+
+
+<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139940310473249_pic.jpeg" width ="480" height="360">
+
 
 原本 EdgeEffect 是往下凸出来的，为了实现水平方向的 EdgeEffect，需要先将画布顺时针旋转 270 度，旋转之后 canvas 已经处于屏幕之外了，所以需要沿着 BA 方向平移，平移： height - paddingTop，水平方向不用移动，mFirstOffset = 0。需要思考一下为什么是 height - paddingTop（**这个是错误的**），假设我们不考虑 paddingTop，也就是说 paddingTop = 0 。为了让 EdgeEffect 能完全显示出来，则必须移动 height，因为 EdgeEffect 的宽度是 height（注意方向坐标系的转换）。然后我们再考虑 paddingTop 的问题，期望的是 ViewPager 的 EdgeEffect 不应该被 padding 截断，所以应该往下移动 height + paddingTop，然后取负值 -height - paddingTop，所以看到 Google 也是会写 bug 的（滑稽脸）。
 
@@ -108,9 +111,9 @@ if (!mRightEdge.isFinished()) {
 
 对比一下原生的 ViewPager 和 fix 之后的 ViewPager：
 
-![](https://cdn.ruguoapp.com/FqflO5e2tGH72MgsVg1430j3kZsd.png)
+<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139926113546001_pic.png" width ="524" height="385">
 
-![](https://cdn.ruguoapp.com/FtWnxvL7I6LSkPTxDhz9C5-8UUHD.png)
+<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139933544369918_pic.png" width ="524" height="385">
 
 看完原生的 ViewPager 之后，再看如何实现 VerticalViewPager 的 EdgeEffect。
 

@@ -2,7 +2,7 @@
 layout:     post
 title:      "TextView-Invalidate-Not-Working"
 author:     "CoXier"
-header-img: "https://cdn.ruguoapp.com/FmKSNlibZLA9N3zTL6zHkmLcQecD.jpg"
+header-img: "https://gitee.com/coxier/tuchuang/raw/master/jike_139982097018193_pic.jpeg"
 tags:
 
 - Android
@@ -12,7 +12,7 @@ tags:
 
 最近遇到一个问题——TextView 的 Invalidate 没有起作用。问题背景是这样的，实现一个 Loading 动画，Loading 的样式是末尾三个点的数目在不断的变化，一个点、两个点、三个点、零个点。类似下图：
 
-![image-20190127200410606](https://cdn.ruguoapp.com/FrrYz7jLJWuY5Y9BUFwp5K7gaoaC.png)
+![image-20190127200410606](https://gitee.com/coxier/tuchuang/raw/master/jike_139973643671621_pic.png)
 
 问题本身不难解决，通过 ValueAnimator 执行动画，然后动态的更新 text 就能实现，但是产品和设计同事希望 TextView 在显示 Loading 时保持**水平居中**，换言之期望的效果就是1. TextView 的左上角坐标不变 2.并且 TextView 宽度也不变。所以想到一个很 tricky 的方法，动态的改变后面三个点的颜色，使之透明。
 
