@@ -111,9 +111,9 @@ if (!mRightEdge.isFinished()) {
 
 对比一下原生的 ViewPager 和 fix 之后的 ViewPager：
 
-<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139926113546001_pic.png" width ="524" height="385">
+<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139926113546001_pic.png" width ="699" height="514">
 
-<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139933544369918_pic.png" width ="524" height="385">
+<img src="https://gitee.com/coxier/tuchuang/raw/master/jike_139933544369918_pic.png" width ="699" height="514">
 
 看完原生的 ViewPager 之后，再看如何实现 VerticalViewPager 的 EdgeEffect。
 
