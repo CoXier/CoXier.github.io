@@ -2,7 +2,7 @@
 layout:     post
 title:      "Apk 体积优化进阶"
 author:     "CoXier"
-header-img: "https://gitee.com/coxier/tuchuang/raw/master/uPic/LiEX6l.jpg"
+header-img: "https://gitee.com/coxier/tuchuang/raw/master/uPic/wg3zKB.jpg"
 tags:
 
 - Android
